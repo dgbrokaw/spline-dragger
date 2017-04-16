@@ -171,7 +171,8 @@ function drawCurvePoints(curve, share_point) {
 
   svg.selectAll("circle."+share_point)
     .filter(function(d) { return d[0] === curve.points[0][0] && d[1] === curve.points[0][1] })
-    .classed(curve.id, true);
+    .classed(curve.id, true)
+    .classed('end', true);
 
   if (d3.event) {
     d3.event.preventDefault();
@@ -214,7 +215,12 @@ function getNumberOfAssociatedCurves(circle) {
 }
 
 function midpointNotShared(curve) {
-  return getNumberOfAssociatedCurves(svg.select("circle."+curve.id+".mid").node()).length < 2;
+  // One of the endpoints of the curve may be a midpoint of another curve, so to get the
+  // correct one we'll filter based on the data of the circles.
+  var midpoint = svg.selectAll("circle."+curve.id+".mid").filter(function(d) {
+    return d[0] === curve.midpoint[0] && d[1] === curve.midpoint[1];
+  }).node();
+  return getNumberOfAssociatedCurves(midpoint) < 2;
 }
 
 function updateCurve() {
@@ -268,7 +274,15 @@ function keydown() {
         svg.selectAll('.'+curve.id+'.end')
           .classed(curve.id, false)
           .classed('selected', false)
+          .classed('end', false)
           .on("mousedown."+curve.id, null)
+          .filter(function(d) {
+            return getNumberOfAssociatedCurves(this) === 0;
+          }).remove();
+        svg.selectAll('.'+curve.id+'.mid')
+          .classed(curve.id, false)
+          .classed('selected', false)
+          .classed('end', false)
           .filter(function(d) {
             return getNumberOfAssociatedCurves(this) === 0;
           }).remove();
