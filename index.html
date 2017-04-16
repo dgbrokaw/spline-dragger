@@ -10,12 +10,6 @@ body {
   height: 500px;
 }
 
-form {
-  position: absolute;
-  bottom: 10px;
-  left: 10px;
-}
-
 rect {
   fill: none;
   pointer-events: all;
@@ -167,13 +161,15 @@ function drawCurvePoints(curve, share_point) {
   }
 }
 
+// A new curve will only be created when holding shift and dragging from a point if that
+// point is not already shared between two curves.
 function circleMouseDown(curve, d) {
-  if (spawn) selected_curves = [curve];
-  else selected_curves = getAssociatedCurveIds(this).map(function(id) {
+  dragged_point = d;
+  var associated_curve_ids = getAssociatedCurveIds(this);
+  if (spawn && associated_curve_ids.length < 2) createCurve(d, curve.id);
+  else selected_curves = associated_curve_ids.map(function(id) {
     return curves.find(function(c) { return c.id === id });
   });
-  dragged_point = d;
-  if (spawn) createCurve(d, curve.id);
 }
 
 function getAssociatedCurveIds(circle) {
