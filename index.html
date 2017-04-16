@@ -60,29 +60,37 @@ function createCurve(coordinates, share_point) {
   var points = generatePointsFromCoordinatePair(coordinates);
   var curve = initCurveDatum(points);
   dragged_point = points[2];
-  selected_curves = [curve]
+  selected_curves = [curve];
+  curves.push(curve);
   addPath(curve, share_point);
 }
 
 function initCurveDatum(points) {
-  setPosOfMidPoint(points, cur_id);
+  setPosOfMiddleControlPoint(points, cur_id);
   var datum = { line: d3.svg.line().interpolate('basis')
               , points: points
+              , midpoint: null
               , id: 'curve'+(cur_id++) };
   return datum;
 }
 
-function setPosOfMidPoint(points, id) {
+function setPosOfMiddleControlPoint(points, id) {
   var dist = Math.hypot(points[2][0]-points[0][0], points[2][1]-points[0][1]);
   points[1][0] = (points[0][0]+points[2][0])/2;
-  if (typeof id === 'string') id = parseInt(id.substring(id.length-1, id.length));
-  if (id % 2 === 1) {
+  // if (typeof id === 'string') id = parseInt(id.substring(id.length-1, id.length));
+  // if (id % 2 === 1) {
     var greatest_y = Math.min(points[0][1], points[2][1]);
     points[1][1] = greatest_y - Math.max(3*dist/4, height/20);
-  } else {
-    var smallest_y = Math.max(points[0][1], points[2][1]);
-    points[1][1] = smallest_y + Math.max(3*dist/4, height/20);
-  }
+  // } else {
+    // var smallest_y = Math.max(points[0][1], points[2][1]);
+    // points[1][1] = smallest_y + Math.max(3*dist/4, height/20);
+  // }
+}
+
+function setPosOfMidpoint(path, midpoint) {
+  var coordinates = getMidpointOfCurve(path);
+  midpoint[0] = coordinates[0];
+  midpoint[1] = coordinates[1];
 }
 
 function addPath(curve, share_point) {
@@ -91,7 +99,7 @@ function addPath(curve, share_point) {
     .datum(curve.points)
     .attr("class", "line")
     .attr("d", curve.line);
-  curves.push(curve);
+  curve.midpoint = getMidpointOfCurve(path);
   drawCurvePoints(curve, share_point);
 }
 
@@ -130,30 +138,40 @@ svg.node().focus();
 
 function drawCurvePoints(curve, share_point) {
   var endpoints = share_point ? [curve.points[2]] : [curve.points[0], curve.points[2]];
-  // var midpoint = getMidpointOfCurve(curve);
 
   var circle = svg.selectAll("circle."+curve.id+".end")
       .data(endpoints, function(d, idx) { return idx; });
-
-  var shared_point = svg.selectAll("circle."+share_point+".end")
-    .filter(function(d) { return d[0] === curve.points[0][0] && d[1] === curve.points[0][1] })
-    .classed(curve.id, true);
 
   circle.enter().append("circle")
       .classed(curve.id, true)
       .classed('end', true)
       .attr("r", 1e-6)
-      .on("mousedown."+curve.id, function(d) { circleMouseDown.call(this, curve, d); })
+      .attr("cx", function(d) { return d[0]; })
+      .attr("cy", function(d) { return d[1]; })
+      .on("mousedown."+curve.id, function(d) { endpointMouseDown.call(this, curve, d); })
     .transition()
       .duration(750)
       .ease("elastic")
       .attr("r", 6.5);
 
-  circle
-    .attr("cx", function(d) { return d[0]; })
-    .attr("cy", function(d) { return d[1]; });
+  var midpoint = svg.selectAll("circle."+curve.id+".mid")
+    .data([curve.midpoint]);
 
-  circle.exit().remove();
+  midpoint.enter().append("circle")
+      .classed(curve.id, true)
+      .classed('mid', true)
+      .attr("r", 1e-6)
+      .attr("cx", function(d) { return d[0]; })
+      .attr("cy", function(d) { return d[1]; })
+      .on("mousedown."+curve.id, function(d) { midpointMouseDown.call(this, curve, d); })
+    .transition()
+      .duration(750)
+      .ease("elasic")
+      .attr("r", 6.5);
+
+  svg.selectAll("circle."+share_point)
+    .filter(function(d) { return d[0] === curve.points[0][0] && d[1] === curve.points[0][1] })
+    .classed(curve.id, true);
 
   if (d3.event) {
     d3.event.preventDefault();
@@ -161,15 +179,25 @@ function drawCurvePoints(curve, share_point) {
   }
 }
 
+function getMidpointOfCurve(path) {
+  var line_vals = path.attr('d').split(/L|,|C/);
+  return [parseFloat(line_vals[line_vals.length/2-1]), parseFloat(line_vals[line_vals.length/2])];
+}
+
 // A new curve will only be created when holding shift and dragging from a point if that
 // point is not already shared between two curves.
-function circleMouseDown(curve, d) {
+function endpointMouseDown(curve, d) {
   dragged_point = d;
   var associated_curve_ids = getAssociatedCurveIds(this);
   if (spawn && associated_curve_ids.length < 2) createCurve(d, curve.id);
-  else selected_curves = associated_curve_ids.map(function(id) {
+  else if (midpointNotShared(curve)) selected_curves = associated_curve_ids.map(function(id) {
     return curves.find(function(c) { return c.id === id });
   });
+}
+
+function midpointMouseDown(curve, d) {
+  var associated_curve_ids = getAssociatedCurveIds(this);
+  if (associated_curve_ids.length < 2) createCurve(d, curve.id);
 }
 
 function getAssociatedCurveIds(circle) {
@@ -185,10 +213,9 @@ function getNumberOfAssociatedCurves(circle) {
   return getAssociatedCurveIds(circle).length;
 }
 
-// function getMidpointOfCurve(curve) {
-//   var line_vals = svg.select('.'+curve.id).attr('d').split(/L|,|C/);
-//   return [line_vals[line_vals.length/2-1], line_vals[line_vals.length/2]];
-// }
+function midpointNotShared(curve) {
+  return getNumberOfAssociatedCurves(svg.select("circle."+curve.id+".mid").node()).length < 2;
+}
 
 function updateCurve() {
   if (selected_curves.length === 0) return;
@@ -196,10 +223,11 @@ function updateCurve() {
   svg.selectAll('circle').classed('selected', false);
 
   selected_curves.forEach(function(curve) {
-    setPosOfMidPoint(curve.points, curve.id);
-    svg.select('#'+curve.id)
+    var path = svg.select('#'+curve.id)
       .classed('selected', true)
       .attr('d', curve.line);
+    setPosOfMiddleControlPoint(curve.points, curve.id);
+    setPosOfMidpoint(path, curve.midpoint);
     svg.selectAll('.'+curve.id)
       .classed('selected', true)
       .attr("cx", function(d) { return d[0]; })
