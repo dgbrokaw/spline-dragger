@@ -139,6 +139,8 @@ svg.node().focus();
 function drawCurvePoints(curve, share_point) {
   var endpoints = share_point ? [curve.points[2]] : [curve.points[0], curve.points[2]];
 
+  // Use the index as the key, because the two endpoints start with the same coordinate values,
+  // and d3 won't create circle elements for each of them in that case.
   var circle = svg.selectAll("circle."+curve.id+".end")
       .data(endpoints, function(d, idx) { return idx; });
 
@@ -169,10 +171,14 @@ function drawCurvePoints(curve, share_point) {
       .ease("elasic")
       .attr("r", 6.5);
 
+  // Do shared point stuff last, because if the shared point is the midpoint of another curve,
+  // it will mess up the midpoint creation of the new curve (it will select this circle instead
+  // of creating a new one).
   svg.selectAll("circle."+share_point)
     .filter(function(d) { return d[0] === curve.points[0][0] && d[1] === curve.points[0][1] })
     .classed(curve.id, true)
-    .classed('end', true);
+    .classed('end', true)
+    .on("mousedown."+curve.id, function(d) { endpointMouseDown.call(this, curve, d); });
 
   if (d3.event) {
     d3.event.preventDefault();
